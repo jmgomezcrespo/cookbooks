@@ -1,0 +1,13 @@
+name 'TandT'
+maintainer 'CloudMas'
+maintainer_email 'you@example.com'
+license 'all_rights'
+description 'Installs/Configures TandT'
+long_description 'Installs/Configures TandT'
+version '0.1.0'
+
+depends 'httpd', '~> 0.4.0'
+depends 'php' 
+depends 'php-fpm'
+depends 'yum-mysql-community', '~> 0.3.0' 
+depends 'mysql', '~> 8.0'
