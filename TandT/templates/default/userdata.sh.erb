@@ -1,0 +1,106 @@
+#!/bin/bash
+#
+##################################################################
+#
+#	Created by: Aryam Gutiérrez López. CloudMas
+#	Date: 13-01-2015
+#
+##################################################################
+
+##################################################################
+# Debe editar las variables de abajo de acuerdo al cliente y los servicios que deseo gestionar.
+# En SUBSCRIPTION_GROUPS puede pasar más de uno separados por coma (,). 
+# Los grupos existentes se publica en el repositorio de sensu-client.
+##################################################################
+CLIENT="TyT"
+HOSTNAME="<%= @environment %>-<%= @layer %>"
+SUBSCRIPTIONS_GROUPS="<%= @suscriptions_groups %>"
+PROVIDER="aws"
+RABBITMQ_SERVER="tyt.cloudmas.com"
+ALWAYS_ON="off"
+##################################################################
+##################################################################
+##################################################################
+#
+#
+#
+#
+#
+
+TOKEN="L8B1dWpMFAiDKNYrsyg7"
+TAG=`curl --header "PRIVATE-TOKEN: $TOKEN" "https://repo.devel.cloudmas.com/api/v3/projects/57/repository/tags" | python -c "import json,sys;obj=json.load(sys.stdin)[0];print obj['name'];"`
+COMMIT=`curl --header "PRIVATE-TOKEN: $TOKEN" "https://repo.devel.cloudmas.com/api/v3/projects/57/repository/tags" | python -c "import json,sys;obj=json.load(sys.stdin)[0];print obj['commit']['id'];"`
+REPO_PROJECT="https://repo.devel.cloudmas.com/cloudmasinfra/sensu-client/repository"
+COMPRESSED_FILE="archive.tar.gz"
+LOG_FILE="/var/log/cloudmas_sensu.log"
+PATH_SENSU_INSTALL="/opt/sensu"
+PROJECT_NAME="sensu-client"
+
+logger -t Sensu -s $(date +"%b %e %R Starting installation of CloudMas SensuClient") 2>&1 | tee ${LOG_FILE}
+
+if [ ! -d "${PATH_SENSU_INSTALL}" ]; then
+	mkdir -p $PATH_SENSU_INSTALL
+	logger -t Sensu -s "SCRIPT-INSTALL: Created ${PATH_SENSU_INSTALL}/." 2>&1 | tee -a ${LOG_FILE}
+else
+	logger -t Sensu -s "SCRIPT-INSTALL: Skipping creation of ${PATH_SENSU_INSTALL}/. It already exist." 2>&1 | tee -a ${LOG_FILE}
+fi
+
+curl --header "PRIVATE-TOKEN: $TOKEN" "${REPO_PROJECT}/${COMPRESSED_FILE}?ref=${TAG}" > ${PATH_SENSU_INSTALL}/${COMPRESSED_FILE}
+tar -xzf ${PATH_SENSU_INSTALL}/${COMPRESSED_FILE} -C $PATH_SENSU_INSTALL
+mv ${PATH_SENSU_INSTALL}/${PROJECT_NAME}-${TAG}-${COMMIT} ${PATH_SENSU_INSTALL}/${PROJECT_NAME}.git
+if [ "$?" -eq "0" ]; then
+	logger -t Sensu -s "SCRIPT-INSTALL: CloudMas SensuClient project was successfully downloaded and decompressed." 2>&1 | tee -a ${LOG_FILE}
+else
+	logger -t Sensu -s "SCRIPT-INSTALL: There was an error downloading or decompressing CloudMas SensuClient project." 2>&1 | tee -a ${LOG_FILE}
+	exit 1
+fi
+
+${PATH_SENSU_INSTALL}/${PROJECT_NAME}.git/install/init.sh
+if [ "$?" -eq "0" ]; then
+	logger -t Sensu -s "SCRIPT-INSTALL: CloudMas SensuClient and all its dependencies were successfully installed." 2>&1 | tee -a ${LOG_FILE}
+else
+	logger -t Sensu -s "SCRIPT-INSTALL: We could not successfully install CloudMas SensuClient." 2>&1 | tee -a ${LOG_FILE}
+	exit 1
+fi
+
+if [ ! -z $1 ]; then
+	HOSTNAME=""
+	CLIENT=""
+	SUBSCRIPTIONS_GROUPS=""
+	PROVIDER=""
+	RABBITMQ_SERVER=""
+	while getopts ":h:c:p:s:r:a" opt; do
+		case $opt in 
+			h)  HOSTNAME=${OPTARG}
+				;;
+			c)  CLIENT=${OPTARG}
+				;;
+			p)	PROVIDER=${OPTARG}
+				;;
+			s)  SUBSCRIPTIONS_GROUPS=${OPTARG}
+				;;
+			r)	RABBITMQ_SERVER=${OPTARG}
+				;;
+			a)	ALWAYS_ON="on"
+				;;
+			?)  ;;
+		esac
+	done
+fi
+
+if [ "$SUBSCRIPTIONS_GROUPS" != "" ] && [ "$ALWAYS_ON" == "on" ]; then
+	${PATH_SENSU_INSTALL}/scripts/registerClient.sh -c ${CLIENT} -h ${HOSTNAME} -p ${PROVIDER} -s ${SUBSCRIPTIONS_GROUPS} -r ${RABBITMQ_SERVER} -a
+elif [ "$SUBSCRIPTIONS_GROUPS" != "" ] && [ "$ALWAYS_ON" == "off" ]; then
+	${PATH_SENSU_INSTALL}/scripts/registerClient.sh -c ${CLIENT} -h ${HOSTNAME} -p ${PROVIDER} -s ${SUBSCRIPTIONS_GROUPS} -r ${RABBITMQ_SERVER}
+elif [ "$SUBSCRIPTIONS_GROUPS" == "" ] && [ "$ALWAYS_ON" == "on" ]; then
+	${PATH_SENSU_INSTALL}/scripts/registerClient.sh -c ${CLIENT} -h ${HOSTNAME} -p ${PROVIDER} -r ${RABBITMQ_SERVER} -a
+else
+	${PATH_SENSU_INSTALL}/scripts/registerClient.sh -c ${CLIENT} -h ${HOSTNAME} -p ${PROVIDER} -r ${RABBITMQ_SERVER}
+fi	
+if [ "$?" -eq "0" ]; then
+	logger -t Sensu -s "SCRIPT-INSTALL: CloudMas SensuClient was successfully registered on Sensu Server" 2>&1 | tee -a ${LOG_FILE}
+else
+	logger -t Sensu -s "SCRIPT-INSTALL: CloudMas SensuClient could not register itself into Sensu Server" 2>&1 | tee -a ${LOG_FILE}
+	exit 1
+fi
+exit 0
